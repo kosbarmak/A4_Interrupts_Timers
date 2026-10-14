@@ -27,11 +27,7 @@
 
 #define LINE_WIDTH 16
 
-
-void welcome_message() {
-    LCD_print("Welcome!", FIRST);
-    LCD_print("Enter key here", SECOND);
-}
+typedef enum { ALTERNATIVE = 2 } GpioMode;
 
 void init()
 {
@@ -39,51 +35,30 @@ void init()
 	LCD_init(true, false, true, true, true, false);
 }
 
-enum State { LOCKED, UNLOCKED, CHANGING };
-
-void status_message(enum State state, char *input)
+// configure microcontroller clock output on PA8
+void set_PA8_clock_MSI()
 {
-	switch (state) {
-	    case (LOCKED):
-		    LCD_clear();
-            LCD_print("LOCKED", FIRST);
-		    LCD_print(input, SECOND);
-	        LED_turn_on();
-            break;
+	// unselect all clocks
+	RCC->CFGR = ((RCC->CFGR & ~(RCC_CFGR_MCOSEL)));
 
-        case (UNLOCKED):
-		    LCD_clear();
-            LCD_print("UNLOCKED", FIRST);
-            LED_turn_off();
-            break;
+	// select 0010 = MSI system clock
+	RCC->CFGR |= RCC_CFGR_MCOSEL_1;
 
-        case (CHANGING):
-            LCD_clear();
-            LCD_print("ENTER PASSWORD", FIRST);
-            LCD_print(input, SECOND);
-            break;
-	}
-}
+	// configure selected clock(s)
 
-void buffer_append(char *buffer, char ch)
-{
-	int len = strlen(buffer);
-	buffer[len] = ch;
-}
+	// enable GPIOA
+	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
 
-void buffer_backspace(char *buffer)
-{
-	int len = strlen(buffer);
-	if (len == 0)
-		return;
+	// set mode
+	GPIOA->MODER &= ~GPIO_MODER_MODE8_Msk;
+	GPIOA->MODER |= (ALTERNATIVE << GPIO_MODER_MODE8_Pos);
 
-	buffer[len - 1] = 0;
-}
+	GPIOA->OTYPER &= ~(GPIO_OTYPER_OT8); // Push-pull output
+	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPD8); // no resistor
+	GPIOA->OSPEEDR |= (GPIO_OSPEEDR_OSPEED8); // high speed
 
-void buffer_reset(char *buffer)
-{
-	int len = strlen(buffer);
-	memset(buffer, 0, len);
+	// Set Pin 8's Alternate Function to be MCO
+	GPIOA->AFR[1] &= ~(GPIO_AFRH_AFSEL8); // select MCO function
 }
 
 int main()
