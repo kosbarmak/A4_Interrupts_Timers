@@ -31,20 +31,24 @@ typedef enum { ALTERNATIVE = 2 } GpioMode;
 
 void init()
 {
-	gpio_init();
-	LCD_init(true, false, true, true, true, false);
+	// gpio_init();
+	// LCD_init(true, false, true, true, true, false);
 }
 
 // configure microcontroller clock output on PA8
 void set_PA8_clock_MSI()
 {
+	// enable GPIOA
+	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
+
 	// unselect all clocks
+	// I think "selection" is just for blanket-setting an option to multiple clocks if you need to
 	RCC->CFGR = ((RCC->CFGR & ~(RCC_CFGR_MCOSEL)));
 
 	// select 0010 = MSI system clock
 	RCC->CFGR |= RCC_CFGR_MCOSEL_1;
 
-	// configure selected clock(s)
+	// now configure selected clock(s)
 
 	// enable GPIOA
 	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
@@ -53,7 +57,10 @@ void set_PA8_clock_MSI()
 	GPIOA->MODER &= ~GPIO_MODER_MODE8_Msk;
 	GPIOA->MODER |= (ALTERNATIVE << GPIO_MODER_MODE8_Pos);
 
+	// allows STM to actively drive either low or high
 	GPIOA->OTYPER &= ~(GPIO_OTYPER_OT8); // Push-pull output
+
+
 	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPD8); // no resistor
 	GPIOA->OSPEEDR |= (GPIO_OSPEEDR_OSPEED8); // high speed
 
@@ -61,7 +68,7 @@ void set_PA8_clock_MSI()
 	GPIOA->AFR[1] &= ~(GPIO_AFRH_AFSEL8); // select MCO function
 }
 
-void TIM2_enable()
+void TIM2_init()
 {
 	// APB1 = advanced peripheral bus
 	// enable the CPU to TIM2 connection for configuring.
@@ -70,6 +77,9 @@ void TIM2_enable()
 
 	// disable timer while configuring
 	TIM2->CR1 &= ~(TIM_CR1_CEN_Msk);
+
+	// CR1.DIR is up count by default
+	// this is what we want
 
 	TIM2->PSC = 0;
 	TIM2->ARR = 799;
@@ -80,6 +90,13 @@ void TIM2_enable()
 	// enable update interrupt	
 	// goes off whenever CNT == ARR
 	TIM2->DIER |= TIM_DIER_UIE_Msk;
+
+	// enable CCR1
+	// goes off whenever CNT = CCR1
+	TIM2->DIER |=TIM_DIER_CC1IE;
+
+	// set the value to 25% of the duty cycle (800 / 4)
+	TIM2->CCR1 = 200;
 	
 	// initialize the update interrupt to zero
 	TIM2->SR &= ~(TIM_SR_UIF_Msk);
@@ -94,6 +111,7 @@ void TIM2_enable()
 	// re-enable timer
 	TIM2->CR1 |= TIM_CR1_CEN_Msk;
 
+	// terminology:
 	// DIER enable timer interrupt requests?
 	// EGR generate timer events by software?
 	// CR counter enable
@@ -103,100 +121,33 @@ void TIM2_enable()
 
 int main()
 {
-	init();
-	welcome_message();
-	LED_turn_on();
+	// init();
+	// TIM2_init();
+	set_PA8_clock_MSI();
 
-	HAL_Delay(3000);
-
-	// enough space for longest string and a null terminator
-	char password[LINE_WIDTH + 1] = { 0 };
-	char input[LINE_WIDTH + 1] = { 0 };
-
-	strcpy(password, "1234");
-
-	int keyInput = 0;
-
-	enum State state = LOCKED;
-
-	while (1) {
-		status_message(state, input);
-
-		keyInput = get_pressed_key();
-		while (keyInput == INVALID_VALUE) {
-			keyInput = get_pressed_key();
-			HAL_Delay(25);
-			continue;
-		}
-
-		switch (state) {
-		case LOCKED:
-			if (keyInput == INPUT_STAR) {
-				buffer_reset(input);
-				continue;
-			}
-
-			if (keyInput == INPUT_POUND) {
-				buffer_backspace(input);
-				continue;
-			}
-
-			buffer_append(input, '0' + keyInput);
-
-			if (strcmp(input, password) == 0) {
-				state = UNLOCKED;
-			}
-
-			break;
-
-		case UNLOCKED:
-			// buffer is empty while unlocked
-			memset(input, 0, sizeof(input));
-
-			if (keyInput == INPUT_STAR) {
-				state = LOCKED;
-				continue;
-			}
-
-			if (keyInput == INPUT_POUND) {
-				state = CHANGING;
-				continue;
-			}
-
-			break;
-
-		case CHANGING:
-			// change password
-			int len = strlen(input);
-			if (keyInput == INPUT_POUND) {
-				if (len == 0) {
-					state = LOCKED;
-				}
-
-				buffer_backspace(input);
-				continue;
-			}
-
-			if (keyInput == INPUT_STAR) {
-				if (len < 4)
-					continue;
-
-				strcpy(password, input);
-				buffer_reset(input);
-				state = LOCKED;
-				continue;
-			}
-
-			buffer_append(input, '0' + keyInput);
-		}
-	}
+	while (true);
 }
 
-void TIM2_IRQHandler() {
-	if (TIM2->SR & TIM_SR_UIF) {
-		// ....
-
-		
-		TIM2->SR &= ~(TIM_SR_UIF);
-	}
-}
+// void TIM2_IRQHandler() {
+// 	if (TIM2->SR & TIM_SR_UIF) {
+// 		// ....
+// 		// set output to high
+//
+//
+//
+// 		// always clear flag
+// 		TIM2->SR &= ~(TIM_SR_UIF);
+//
+// 		return;
+// 	}
+//
+// 	if (TIM2->SR & TIM_SR_CC1IF) {
+//
+// 		//set output to low
+//
+//
+// 		// clear flag
+// 		TIM2->SR &= ~(TIM_SR_CC1IF);
+// 		return;
+// 	}
+// }
