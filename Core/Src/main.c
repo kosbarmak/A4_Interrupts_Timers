@@ -61,6 +61,46 @@ void set_PA8_clock_MSI()
 	GPIOA->AFR[1] &= ~(GPIO_AFRH_AFSEL8); // select MCO function
 }
 
+void TIM2_enable()
+{
+	// APB1 = advanced peripheral bus
+	// enable the CPU to TIM2 connection for configuring.
+	// also connects a peripheral clock to TIM2
+	RCC->APB1ENR1 |= (RCC_APB1ENR1_TIM2EN_Msk);
+
+	// disable timer while configuring
+	TIM2->CR1 &= ~(TIM_CR1_CEN_Msk);
+
+	TIM2->PSC = 0;
+	TIM2->ARR = 799;
+	
+	// start at a known val
+	TIM2->CNT = 0;
+
+	// enable update interrupt	
+	// goes off whenever CNT == ARR
+	TIM2->DIER |= TIM_DIER_UIE_Msk;
+	
+	// initialize the update interrupt to zero
+	TIM2->SR &= ~(TIM_SR_UIF_Msk);
+
+	// enable TIM2 in the NVIC
+	// TIM2 is ISER[0] within NVIC. 
+	NVIC->ISER[0] = 1 << TIM2_IRQn;
+
+	// can also do this
+	// NVIC_EnableIRQ(TIM2_IRQn);
+
+	// re-enable timer
+	TIM2->CR1 |= TIM_CR1_CEN_Msk;
+
+	// DIER enable timer interrupt requests?
+	// EGR generate timer events by software?
+	// CR counter enable
+	// UIE - update interrupt enable
+	// CEN - counter enable
+}
+
 int main()
 {
 	init();
@@ -149,5 +189,14 @@ int main()
 
 			buffer_append(input, '0' + keyInput);
 		}
+	}
+}
+
+void TIM2_IRQHandler() {
+	if (TIM2->SR & TIM_SR_UIF) {
+		// ....
+
+		
+		TIM2->SR &= ~(TIM_SR_UIF);
 	}
 }
